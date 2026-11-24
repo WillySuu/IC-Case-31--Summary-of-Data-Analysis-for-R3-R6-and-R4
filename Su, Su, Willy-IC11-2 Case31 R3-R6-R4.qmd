@@ -1,0 +1,1218 @@
+---
+title: "Case 31 - Summary of Data Analysis for R3, R6, and R4"
+author: "Willy Su"
+date: "2026-11-24"
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    toc-location: left
+    number-sections: true
+    embed-resources: true
+    code-fold: true
+    theme: cosmo
+execute:
+  warning: false
+  message: false
+---
+
+# Data Preparation
+
+```{r}
+#| label: setup
+#| include: false
+
+library(haven)
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(knitr)
+
+efcu <- read_sav("Case 31 Data_efcu_4.sav")
+```
+
+## Dataset Overview
+
+```{r}
+#| label: tbl-dataset
+#| tbl-cap: "Overview of the Case 31 Dataset"
+
+data.frame(
+  Description = c("Number of Observations", 
+                  "Number of Variables"),
+  Value = c(nrow(efcu), ncol(efcu))
+) |>
+  kable()
+```
+
+# R3: Attitudes Toward Credit Union Employees
+
+This research question examines members' attitudes toward credit union employees using survey items Q3 through Q6.
+
+## Descriptive Statistics
+
+```{r}
+#| include: false
+
+r3_vars <- c("q3", "q4", "q5", "q6")
+
+lapply(r3_vars, function(v) {
+  list(
+    Question = v,
+    Description = attr(efcu[[v]], "label"),
+    Labels = attr(efcu[[v]], "labels"),
+    Frequency = table(efcu[[v]], useNA = "ifany")
+  )
+})
+```
+
+```{r}
+#| label: tbl-r3-descriptive
+#| tbl-cap: "Descriptive Statistics for Attitudes Toward Credit Union Employees"
+
+r3_summary <- do.call(rbind, lapply(r3_vars, function(v) {
+  x <- as.numeric(efcu[[v]])
+  x <- x[x %in% 1:5]
+
+  data.frame(
+    Question = toupper(v),
+    N = length(x),
+    Mean = round(mean(x), 3),
+    SD = round(sd(x), 3),
+    Minimum = min(x),
+    Maximum = max(x)
+  )
+}))
+
+kable(r3_summary)
+```
+
+## One-Sample t-test
+
+A one-sample t-test was conducted for each survey item to determine whether members' attitudes toward credit union employees differed significantly from the neutral midpoint of 3.
+
+```{r}
+#| label: tbl-r3-ttest
+#| tbl-cap: "One-Sample t-test Results for R3"
+
+r3_tests <- do.call(rbind, lapply(r3_vars, function(v) {
+  x <- as.numeric(efcu[[v]])
+  x <- x[x %in% 1:5]
+
+  test <- t.test(x, mu = 3)
+
+  data.frame(
+    Question = toupper(v),
+    N = length(x),
+    Mean = round(mean(x), 3),
+    SD = round(sd(x), 3),
+    t = round(as.numeric(test$statistic), 3),
+    df = as.numeric(test$parameter),
+    P_Value = format.pval(test$p.value,
+                         digits = 3, eps = 0.001),
+    Significant = ifelse(test$p.value < 0.05,
+                         "Yes", "No")
+  )
+}))
+
+kable(r3_tests)
+```
+
+## Data Visualization
+
+```{r}
+#| label: fig-r3-ratings
+#| fig-cap: "Mean Ratings of Attitudes Toward Credit Union Employees"
+#| fig-width: 8
+#| fig-height: 4.5
+
+ggplot(r3_summary, aes(x = Question, y = Mean)) +
+  geom_col(fill = "steelblue", width = 0.6) +
+  geom_hline(
+    yintercept = 3,
+    linetype = "dashed",
+    color = "red"
+  ) +
+  geom_text(
+    aes(label = sprintf("%.2f", Mean)),
+    vjust = -0.5
+  ) +
+  scale_y_continuous(
+    limits = c(0, 5),
+    breaks = 0:5
+  ) +
+  labs(
+    x = "Survey Question",
+    y = "Mean Rating"
+  ) +
+  theme_minimal()
+```
+
+## Findings and Insights
+
+Members generally have positive attitudes toward credit union
+employees. The mean ratings for Q3 through Q6 range from
+4.078 to 4.352, indicating favorable perceptions of employee
+proficiencies.
+
+All four mean ratings are significantly higher than the neutral
+midpoint of 3 (p < .001). Q3 received the highest mean rating
+(M = 4.352), followed by Q4 (M = 4.312). Q5 and Q6 received
+slightly lower but still positive ratings (M = 4.078).
+
+These findings suggest that employee proficiency is a strength
+of the credit union, although there is still room for improvement
+in the areas represented by Q5 and Q6.
+
+## Composite Scale: Employee Proficiency
+
+Based on the previous reliability and factor analyses,
+Q3 through Q6 were combined into a composite measure
+named Att_Employee.
+
+```{r}
+#| label: tbl-r3-composite
+#| tbl-cap: "Descriptive Statistics for Employee Proficiency"
+
+efcu$Att_Employee <- rowMeans(
+  efcu[, c("q3", "q4", "q5", "q6")],
+  na.rm = FALSE
+)
+
+x <- na.omit(efcu$Att_Employee)
+
+data.frame(
+  Variable = "Att_Employee",
+  N = length(x),
+  Mean = round(mean(x), 3),
+  SD = round(sd(x), 3),
+  Minimum = min(x),
+  Maximum = max(x)
+) |>
+  kable()
+```
+
+## One-Sample t-test for Employee Proficiency
+
+```{r}
+#| label: tbl-r3-composite-test
+#| tbl-cap: "One-Sample t-test for Employee Proficiency"
+
+employee_test <- t.test(
+  efcu$Att_Employee,
+  mu = 3
+)
+
+data.frame(
+  Variable = "Att_Employee",
+  Mean = round(mean(efcu$Att_Employee, na.rm = TRUE), 3),
+  t = round(as.numeric(employee_test$statistic), 3),
+  df = as.numeric(employee_test$parameter),
+  P_Value = format.pval(employee_test$p.value,
+                        digits = 3, eps = 0.001),
+  Lower_CI = round(employee_test$conf.int[1], 3),
+  Upper_CI = round(employee_test$conf.int[2], 3)
+) |>
+  kable()
+```
+
+The composite scale for employee proficiency has a mean
+of 4.205 (SD = 0.594). The one-sample t-test indicates
+that the mean is significantly higher than the neutral
+midpoint of 3, t(127) = 22.954, p < .001,
+95% CI [4.101, 4.309].
+
+These results indicate that members have favorable
+attitudes toward credit union employees.
+
+# R6: Operational Effectiveness
+
+This research question examines members' perceptions of
+the operational effectiveness of the credit union.
+
+## Data Preparation
+
+```{r}
+#| include: false
+
+r6_vars <- c(
+  "q9", "q10", "q11", "q12",
+  "q31", "q32", "q33", "q34", "q37"
+)
+
+lapply(r6_vars, function(v) {
+  list(
+    Question = v,
+    Description = attr(efcu[[v]], "label"),
+    Labels = attr(efcu[[v]], "labels"),
+    Frequency = table(efcu[[v]], useNA = "ifany")
+  )
+})
+```
+
+## Data Recoding
+
+Q37 is reverse-coded so that higher scores represent
+more favorable evaluations of operational effectiveness.
+No Opinion responses are treated as missing values.
+
+```{r}
+#| label: tbl-r6-recoding
+#| tbl-cap: "Recoding of Overall Operational Effectiveness"
+
+efcu$Q37_r <- ifelse(
+  efcu$q37 %in% 1:5,
+  6 - as.numeric(efcu$q37),
+  NA_real_
+)
+
+table(
+  Original = efcu$q37,
+  Recoded = efcu$Q37_r,
+  useNA = "ifany"
+)
+```
+
+Q9 retains its original response categories. Q10 is
+reverse-coded so that higher scores indicate better
+statement accuracy. Q11 and Q12 are recoded so that
+Yes = 2 and No = 1. Undefined responses are treated
+as missing values.
+
+```{r}
+#| label: tbl-r6-valid-responses
+#| tbl-cap: "Valid and Missing Responses for Q9-Q12"
+
+efcu$q9_r <- ifelse(
+  efcu$q9 %in% 1:5,
+  as.numeric(efcu$q9),
+  NA_real_
+)
+
+efcu$q10_r <- ifelse(
+  efcu$q10 %in% 1:4,
+  5 - as.numeric(efcu$q10),
+  NA_real_
+)
+
+efcu$q11_r <- ifelse(
+  efcu$q11 %in% 1:2,
+  3 - as.numeric(efcu$q11),
+  NA_real_
+)
+
+efcu$q12_r <- ifelse(
+  efcu$q12 %in% 1:2,
+  3 - as.numeric(efcu$q12),
+  NA_real_
+)
+
+r6_chi_vars <- c("q9_r", "q10_r", "q11_r", "q12_r")
+
+r6_valid <- data.frame(
+  Question = r6_chi_vars,
+  Valid = sapply(efcu[r6_chi_vars],
+                 function(x) sum(!is.na(x))),
+  Missing = sapply(efcu[r6_chi_vars],
+                   function(x) sum(is.na(x)))
+)
+
+kable(r6_valid, row.names = FALSE)
+```
+
+## Descriptive Statistics
+
+Frequency and percentage distributions are used to
+summarize members' responses to Q9 through Q12.
+Missing responses are excluded from the percentage
+calculations.
+
+```{r}
+#| label: tbl-r6-frequency
+#| tbl-cap: "Frequency and Percentage Distributions for Q9-Q12"
+
+r6_frequency <- do.call(rbind, lapply(r6_chi_vars, function(v) {
+  x <- na.omit(efcu[[v]])
+  freq <- table(x)
+
+  data.frame(
+    Question = toupper(sub("_r$", "", v)),
+    Response = names(freq),
+    Frequency = as.numeric(freq),
+    Percentage = round(
+      as.numeric(prop.table(freq)) * 100, 2
+    )
+  )
+}))
+
+kable(r6_frequency, row.names = FALSE)
+```
+
+## Chi-Square Goodness-of-Fit Test
+
+Chi-square goodness-of-fit tests are conducted to
+determine whether the observed response distributions
+differ significantly from equal expected proportions.
+
+```{r}
+#| label: tbl-r6-chi-square
+#| tbl-cap: "Chi-Square Goodness-of-Fit Tests for Q9-Q12"
+
+r6_levels <- list(
+  q9_r = 1:5,
+  q10_r = 1:4,
+  q11_r = 1:2,
+  q12_r = 1:2
+)
+
+r6_chi_tests <- do.call(rbind, lapply(r6_chi_vars, function(v) {
+  x <- na.omit(efcu[[v]])
+  freq <- table(factor(x, levels = r6_levels[[v]]))
+  test <- chisq.test(freq)
+
+  data.frame(
+    Question = toupper(sub("_r$", "", v)),
+    N = length(x),
+    Chi_Square = round(as.numeric(test$statistic), 3),
+    df = as.numeric(test$parameter),
+    P_Value = format.pval(test$p.value,
+                         digits = 3, eps = 0.001),
+    Significant = ifelse(test$p.value < 0.05,
+                         "Yes", "No")
+  )
+}))
+
+kable(r6_chi_tests, row.names = FALSE)
+```
+
+## Descriptive Statistics for Q31-Q34 and Q37
+
+Descriptive statistics are calculated to summarize
+members' evaluations of operational effectiveness.
+Higher scores represent more favorable evaluations
+for positively worded items.
+
+```{r}
+#| label: tbl-r6-summary
+#| tbl-cap: "Descriptive Statistics for Operational Effectiveness"
+
+r6_rating_vars <- c("q31", "q32", "q33", "q34", "Q37_r")
+
+r6_summary <- do.call(rbind, lapply(r6_rating_vars, function(v) {
+  x <- as.numeric(efcu[[v]])
+  x <- x[x %in% 1:5]
+
+  data.frame(
+    Question = toupper(v),
+    N = length(x),
+    Mean = round(mean(x), 3),
+    SD = round(sd(x), 3),
+    Minimum = min(x),
+    Maximum = max(x)
+  )
+}))
+
+kable(r6_summary, row.names = FALSE)
+```
+
+## One-Sample t-test for Operational Effectiveness
+
+One-sample t-tests are conducted to determine whether
+the mean ratings for Q31-Q34 and Q37 differ
+significantly from the midpoint of 3.
+
+```{r}
+#| label: tbl-r6-ttest
+#| tbl-cap: "One-Sample t-tests for Operational Effectiveness"
+
+r6_tests <- do.call(rbind, lapply(r6_rating_vars, function(v) {
+  x <- as.numeric(efcu[[v]])
+  x <- x[x %in% 1:5]
+
+  test <- t.test(x, mu = 3)
+
+  data.frame(
+    Question = toupper(v),
+    N = length(x),
+    Mean = round(mean(x), 3),
+    SD = round(sd(x), 3),
+    t = round(as.numeric(test$statistic), 3),
+    df = as.numeric(test$parameter),
+    P_Value = format.pval(test$p.value,
+                         digits = 3, eps = 0.001),
+    Significant = ifelse(test$p.value < 0.05,
+                         "Yes", "No")
+  )
+}))
+
+kable(r6_tests, row.names = FALSE)
+```
+
+## Data Visualization
+
+```{r}
+#| label: fig-r6-ratings
+#| fig-cap: "Mean Ratings of Operational Effectiveness"
+#| fig-width: 8
+#| fig-height: 4.5
+
+ggplot(r6_summary, aes(x = Question, y = Mean)) +
+  geom_col(
+    fill = "steelblue",
+    width = 0.7
+  ) +
+  geom_hline(
+    yintercept = 3,
+    linetype = "dashed",
+    color = "red"
+  ) +
+  geom_text(
+    aes(label = sprintf("%.2f", Mean)),
+    vjust = -0.5
+  ) +
+  scale_y_continuous(
+    limits = c(0, 5),
+    breaks = 0:5
+  ) +
+  labs(
+    x = "Survey Question",
+    y = "Mean Rating"
+  ) +
+  theme_minimal()
+```
+
+## Findings and Insights
+
+The chi-square goodness-of-fit tests for Q9 through Q12
+indicate that all response distributions differ
+significantly from equal expected proportions
+(p < .001).
+
+The mean ratings for Q31 through Q34 and Q37 range
+from 3.461 to 4.066. All five mean ratings are
+significantly higher than the midpoint of 3
+(p < .001), indicating generally favorable
+perceptions of operational effectiveness.
+
+Q37 received the highest mean rating (M = 4.066),
+followed by Q31 (M = 3.945). Q34 received the lowest
+mean rating (M = 3.461), suggesting that simplifying
+loan applications may be an area for improvement.
+
+Overall, members evaluate the credit union's
+operations positively, although opportunities
+remain to improve operational processes.
+
+# R4a: Employee Proficiency by Member Residence
+
+This research question examines whether attitudes
+toward employee proficiencies differ between members
+who live in the area of the firm's headquarters and
+members who live elsewhere.
+
+## Data Preparation
+
+```{r}
+#| include: false
+
+attr(efcu$q38, "label")
+attr(efcu$q38, "labels")
+table(efcu$q38, useNA = "ifany")
+```
+
+## Descriptive Statistics
+
+Descriptive statistics are used to compare attitudes
+toward employee proficiencies between members living
+in the headquarters area and those living elsewhere.
+
+```{r}
+#| label: tbl-r4a-summary
+#| tbl-cap: "Employee Proficiency by Member Residence"
+
+efcu$Residence <- factor(
+  efcu$q38,
+  levels = c(1, 2),
+  labels = c("Headquarters Area", "Elsewhere")
+)
+
+r4a_summary <- efcu |>
+  dplyr::group_by(Residence) |>
+  dplyr::summarise(
+    N = sum(!is.na(Att_Employee)),
+    Mean = round(mean(Att_Employee, na.rm = TRUE), 3),
+    SD = round(sd(Att_Employee, na.rm = TRUE), 3),
+    .groups = "drop"
+  )
+
+knitr::kable(r4a_summary)
+```
+
+## Independent Samples t-test
+
+An independent samples t-test is conducted to determine
+whether attitudes toward employee proficiencies differ
+significantly between members living in the headquarters
+area and those living elsewhere.
+
+```{r}
+#| label: tbl-r4a-t-test
+#| tbl-cap: "Independent Samples t-test by Member Residence"
+
+r4a_test <- t.test(
+  Att_Employee ~ Residence,
+  data = efcu,
+  var.equal = FALSE
+)
+
+data.frame(
+  t = round(as.numeric(r4a_test$statistic), 3),
+  df = round(as.numeric(r4a_test$parameter), 3),
+  P_Value = format.pval(
+    r4a_test$p.value,
+    digits = 3, eps = 0.001
+  ),
+  Lower_CI = round(r4a_test$conf.int[1], 3),
+  Upper_CI = round(r4a_test$conf.int[2], 3),
+  Significant = ifelse(
+    r4a_test$p.value < 0.05, "Yes", "No"
+  )
+) |>
+  knitr::kable()
+```
+
+## Data Visualization
+
+```{r}
+#| label: fig-r4a-residence
+#| fig-cap: "Mean Employee Proficiency Ratings by Member Residence"
+
+ggplot(r4a_summary,
+       aes(x = Residence, y = Mean)) +
+  geom_col(
+    fill = "steelblue",
+    width = 0.6
+  ) +
+  geom_hline(
+    yintercept = 3,
+    linetype = "dashed",
+    color = "red"
+  ) +
+  geom_text(
+    aes(label = sprintf("%.2f", Mean)),
+    vjust = -0.5
+  ) +
+  scale_y_continuous(
+    limits = c(0, 5),
+    breaks = 0:5
+  ) +
+  labs(
+    x = "Member Residence",
+    y = "Mean Employee Proficiency Rating"
+  ) +
+  theme_minimal()
+```
+
+## Findings and Insights
+
+Members living in the headquarters area reported a
+slightly higher mean employee proficiency rating
+(M = 4.281, SD = 0.575) than members living elsewhere
+(M = 4.144, SD = 0.606).
+
+However, the independent samples t-test revealed no
+statistically significant difference between the two
+groups (t = 1.302, p = 0.1955).
+
+These findings suggest that members generally have
+positive perceptions of employee proficiencies,
+regardless of their residential location. There is
+insufficient evidence to conclude that employee
+proficiency ratings differ by member residence.
+
+# R4b: Awareness of Services by Member Residence
+
+This research question examines whether awareness of
+credit union services differs between members living
+in the headquarters area and those living elsewhere.
+
+## Data Preparation
+
+```{r}
+#| include: false
+
+r4b_vars <- paste0("q", 13:26)
+
+lapply(r4b_vars, function(v) {
+  list(
+    Question = v,
+    Description = attr(efcu[[v]], "label"),
+    Labels = attr(efcu[[v]], "labels"),
+    Frequency = table(efcu[[v]], useNA = "ifany")
+  )
+})
+```
+
+## Data Recoding
+
+Q13–Q26 are reverse-coded so that higher scores
+represent greater awareness and usage of credit
+union services. Responses outside the valid range
+are treated as missing values.
+
+```{r}
+#| label: tbl-r4b-recoding
+#| tbl-cap: "Valid and Missing Responses for Q13–Q26"
+
+for (v in r4b_vars) {
+  x <- as.numeric(efcu[[v]])
+
+  efcu[[paste0(v, "_r")]] <- ifelse(
+    x %in% 1:3,
+    4 - x,
+    NA_real_
+  )
+}
+
+r4b_recoded <- paste0(r4b_vars, "_r")
+
+r4b_valid <- data.frame(
+  Question = toupper(r4b_vars),
+  Valid = sapply(efcu[r4b_recoded],
+                 function(x) sum(!is.na(x))),
+  Missing = sapply(efcu[r4b_recoded],
+                   function(x) sum(is.na(x)))
+)
+
+knitr::kable(r4b_valid, row.names = FALSE)
+```
+
+## Two-way Cross-tabulation
+
+Cross-tabulations are used to compare awareness
+and usage of credit union services between members
+living in the headquarters area and those living
+elsewhere. Row percentages are calculated to
+compare response distributions across residence groups.
+
+```{r}
+#| label: tbl-r4b-crosstab
+#| tbl-cap: "Service Awareness by Member Residence"
+
+r4b_crosstab <- do.call(rbind, lapply(r4b_recoded, function(v) {
+
+  tab <- table(
+    Residence = efcu$Residence,
+    Awareness = factor(
+      efcu[[v]],
+      levels = c(1, 2, 3),
+      labels = c(
+        "Unaware",
+        "Aware but Not Used",
+        "Aware and Used"
+      )
+    )
+  )
+
+  pct <- prop.table(tab, margin = 1) * 100
+
+  data.frame(
+    Question = toupper(sub("_r$", "", v)),
+    Residence = rownames(tab),
+    Unaware = round(pct[, 1], 2),
+    Aware_Not_Used = round(pct[, 2], 2),
+    Aware_Used = round(pct[, 3], 2)
+  )
+}))
+
+knitr::kable(r4b_crosstab, row.names = FALSE)
+```
+
+## Chi-Square Test of Independence
+
+Chi-square tests of independence are conducted to
+determine whether awareness and usage of credit
+union services are significantly associated with
+member residence.
+
+```{r}
+#| label: tbl-r4b-chi-square
+#| tbl-cap: "Chi-Square Tests of Independence for Q13–Q26"
+
+r4b_chi_tests <- do.call(rbind, lapply(r4b_recoded, function(v) {
+
+  tab <- table(
+    efcu$Residence,
+    factor(efcu[[v]], levels = 1:3)
+  )
+
+  tab <- tab[rowSums(tab) > 0,
+             colSums(tab) > 0, drop = FALSE]
+
+  test <- suppressWarnings(chisq.test(tab))
+
+  data.frame(
+    Question = toupper(sub("_r$", "", v)),
+    N = sum(tab),
+    Chi_Square = round(as.numeric(test$statistic), 3),
+    df = as.numeric(test$parameter),
+    P_Value = format.pval(
+      test$p.value, digits = 3, eps = 0.001
+    ),
+    Min_Expected = round(min(test$expected), 2),
+    Significant = ifelse(
+      test$p.value < 0.05, "Yes", "No"
+    )
+  )
+}))
+
+knitr::kable(r4b_chi_tests, row.names = FALSE)
+```
+
+## Additional Validation: Fisher's Exact Test
+
+Fisher's exact tests are conducted for items with
+small expected cell frequencies to validate the
+chi-square test results.
+
+```{r}
+#| label: tbl-r4b-fisher
+#| tbl-cap: "Fisher's Exact Tests for Small Expected Frequencies"
+
+r4b_fisher_vars <- c(
+  "q15_r", "q18_r", "q19_r",
+  "q22_r", "q24_r", "q25_r"
+)
+
+r4b_fisher_tests <- do.call(rbind, lapply(
+  r4b_fisher_vars, function(v) {
+
+    tab <- table(
+      efcu$Residence,
+      factor(efcu[[v]], levels = 1:3)
+    )
+
+    tab <- tab[rowSums(tab) > 0,
+               colSums(tab) > 0, drop = FALSE]
+
+    test <- fisher.test(tab)
+
+    data.frame(
+      Question = toupper(sub("_r$", "", v)),
+      N = sum(tab),
+      P_Value = format.pval(
+        test$p.value, digits = 3, eps = 0.001
+      ),
+      Significant = ifelse(
+        test$p.value < 0.05, "Yes", "No"
+      )
+    )
+  }
+))
+
+knitr::kable(r4b_fisher_tests, row.names = FALSE)
+```
+
+## Data Visualization
+
+The following figure compares service awareness
+between members living in the headquarters area
+and those living elsewhere. Awareness includes
+members who have used the service and those who
+are aware of the service but have not used it.
+
+```{r}
+#| label: fig-r4b-awareness
+#| fig-cap: "Service Awareness by Member Residence"
+#| fig-width: 10
+#| fig-height: 6
+
+r4b_plot <- r4b_crosstab |>
+  dplyr::mutate(
+    Awareness = Aware_Not_Used + Aware_Used
+  )
+
+ggplot(
+  r4b_plot,
+  aes(
+    x = Question,
+    y = Awareness,
+    fill = Residence
+  )
+) +
+  geom_col(position = "dodge", width = 0.7) +
+  scale_fill_manual(
+    values = c("steelblue", "orange")
+  ) +
+  scale_y_continuous(
+    limits = c(0, 100),
+    breaks = seq(0, 100, 20)
+  ) +
+  labs(
+    x = "Survey Question",
+    y = "Service Awareness (%)",
+    fill = "Member Residence"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "bottom")
+```
+
+## Findings and Insights
+
+The chi-square tests of independence indicate that
+none of the 14 service awareness and usage items
+(Q13–Q26) show statistically significant associations
+with member residence (all p-values > 0.05).
+
+Fisher's exact tests were also conducted for six
+items with small expected cell frequencies.
+The results support the same conclusion, with
+all p-values greater than 0.05.
+
+Overall, there is insufficient statistical evidence
+to conclude that service awareness and usage differ
+between members living in the headquarters area
+and those living elsewhere.
+
+These findings suggest that the credit union may
+consider a consistent service communication and
+promotion strategy across both geographic groups,
+while continuing to monitor individual service
+awareness and usage.
+
+# R4c: Operational Effectiveness by Member Residence
+
+This research question examines whether members'
+attitudes toward operational effectiveness differ
+between those living in the headquarters area
+and those living elsewhere.
+
+## Data Preparation
+
+The recoded variables from R6 and the residence
+variable from R4a are used for this analysis.
+
+```{r}
+#| include: false
+
+r4c_rating_vars <- c(
+  "q9_r", "q10_r",
+  "q31", "q32", "q33", "q34",
+  "Q37_r"
+)
+
+r4c_chi_vars <- c("q11_r", "q12_r")
+
+r4c_vars <- c(
+  r4c_rating_vars,
+  r4c_chi_vars
+)
+
+sapply(efcu[r4c_vars], function(x) {
+  sum(!is.na(x))
+})
+
+table(efcu$Residence, useNA = "ifany")
+```
+
+## Descriptive Statistics
+
+Descriptive statistics are calculated to compare
+operational effectiveness ratings between members
+living in the headquarters area and those living
+elsewhere.
+
+```{r}
+#| label: tbl-r4c-summary
+#| tbl-cap: "Operational Effectiveness by Member Residence"
+
+r4c_summary <- do.call(rbind, lapply(
+  r4c_rating_vars, function(v) {
+
+    data.frame(
+      Question = toupper(v),
+      Residence = efcu$Residence,
+      Score = as.numeric(efcu[[v]])
+    ) |>
+      dplyr::filter(
+        !is.na(Score),
+        !is.na(Residence)
+      ) |>
+      dplyr::group_by(Question, Residence) |>
+      dplyr::summarise(
+        N = dplyr::n(),
+        Mean = round(mean(Score), 3),
+        SD = round(sd(Score), 3),
+        .groups = "drop"
+      )
+  }
+))
+
+knitr::kable(r4c_summary, row.names = FALSE)
+```
+
+## Independent Samples t-test
+
+Independent samples t-tests are conducted to
+determine whether operational effectiveness
+ratings differ significantly between members
+living in the headquarters area and those
+living elsewhere.
+
+Welch's t-test is used without assuming equal
+population variances.
+
+```{r}
+#| label: tbl-r4c-t-tests
+#| tbl-cap: "Independent Samples t-tests for Operational Effectiveness"
+
+r4c_tests <- do.call(rbind, lapply(
+  r4c_rating_vars, function(v) {
+
+    temp <- data.frame(
+      Score = as.numeric(efcu[[v]]),
+      Residence = efcu$Residence
+    )
+
+    test <- t.test(
+      Score ~ Residence,
+      data = temp,
+      var.equal = FALSE
+    )
+
+    data.frame(
+      Question = toupper(v),
+      t = round(as.numeric(test$statistic), 3),
+      df = round(as.numeric(test$parameter), 3),
+      P_Value = format.pval(
+        test$p.value,
+        digits = 3,
+        eps = 0.001
+      ),
+      Lower_CI = round(test$conf.int[1], 3),
+      Upper_CI = round(test$conf.int[2], 3),
+      Significant = ifelse(
+        test$p.value < 0.05, "Yes", "No"
+      )
+    )
+  }
+))
+
+knitr::kable(r4c_tests, row.names = FALSE)
+```
+
+## Two-way Cross-tabulation
+
+Two-way cross-tabulations are used to compare
+responses to Q11 and Q12 between members living
+in the headquarters area and those living elsewhere.
+
+Row percentages are calculated using valid responses
+within each residence group.
+
+```{r}
+#| label: tbl-r4c-crosstab
+#| tbl-cap: "Responses to Q11 and Q12 by Member Residence"
+
+r4c_crosstab <- do.call(rbind, lapply(
+  r4c_chi_vars, function(v) {
+
+    tab <- table(
+      Residence = efcu$Residence,
+      Response = factor(
+        efcu[[v]],
+        levels = c(1, 2),
+        labels = c("No", "Yes")
+      )
+    )
+
+    pct <- prop.table(tab, margin = 1) * 100
+
+    data.frame(
+      Question = toupper(sub("_r$", "", v)),
+      Residence = rownames(tab),
+      N = rowSums(tab),
+      No = as.numeric(tab[, 1]),
+      Yes = as.numeric(tab[, 2]),
+      No_Percentage = round(pct[, 1], 2),
+      Yes_Percentage = round(pct[, 2], 2)
+    )
+  }
+))
+
+knitr::kable(r4c_crosstab, row.names = FALSE)
+```
+
+## Chi-Square Test of Independence
+
+Chi-square tests of independence are conducted to
+determine whether responses to Q11 and Q12 are
+significantly associated with member residence.
+
+Fisher's exact test is also conducted when expected
+cell frequencies are below five.
+
+```{r}
+#| label: tbl-r4c-chi-square
+#| tbl-cap: "Chi-Square Tests of Independence for Q11 and Q12"
+
+r4c_chi_tests <- do.call(rbind, lapply(
+  r4c_chi_vars, function(v) {
+
+    tab <- table(
+      efcu$Residence,
+      factor(efcu[[v]], levels = c(1, 2))
+    )
+
+    test <- suppressWarnings(chisq.test(tab))
+
+    fisher_p <- if (min(test$expected) < 5) {
+      fisher.test(tab)$p.value
+    } else {
+      NA_real_
+    }
+
+    final_p <- ifelse(
+      is.na(fisher_p), test$p.value, fisher_p
+    )
+
+    data.frame(
+      Question = toupper(sub("_r$", "", v)),
+      N = sum(tab),
+      Chi_Square = round(
+        as.numeric(test$statistic), 3
+      ),
+      df = as.numeric(test$parameter),
+      P_Value = round(test$p.value, 4),
+      Min_Expected = round(min(test$expected), 2),
+      Fisher_P = round(fisher_p, 4),
+      Significant = ifelse(
+        final_p < 0.05, "Yes", "No"
+      )
+    )
+  }
+))
+
+knitr::kable(r4c_chi_tests, row.names = FALSE)
+```
+
+## Data Visualization
+
+The following visualizations compare operational
+effectiveness ratings and response distributions
+across member residence groups.
+
+```{r}
+#| label: fig-r4c-ratings
+#| fig-cap: "Mean Operational Effectiveness Ratings by Residence"
+#| fig-width: 9
+#| fig-height: 5
+
+ggplot2::ggplot(
+  r4c_summary,
+  ggplot2::aes(
+    x = Question,
+    y = Mean,
+    fill = Residence
+  )
+) +
+  ggplot2::geom_col(
+    position = ggplot2::position_dodge(0.8),
+    width = 0.7
+  ) +
+  ggplot2::geom_text(
+    ggplot2::aes(label = sprintf("%.2f", Mean)),
+    position = ggplot2::position_dodge(0.8),
+    vjust = -0.4,
+    size = 3
+  ) +
+  ggplot2::scale_fill_manual(
+    values = c("#4472C4", "#ED7D31")
+  ) +
+  ggplot2::scale_y_continuous(
+    limits = c(0, 5.5)
+  ) +
+  ggplot2::labs(
+    x = "Question",
+    y = "Mean Score",
+    fill = "Residence"
+  ) +
+  ggplot2::theme_minimal() +
+  ggplot2::theme(
+    legend.position = "bottom"
+  )
+```
+
+```{r}
+#| label: fig-r4c-responses
+#| fig-cap: "Yes Response Percentages by Member Residence"
+#| fig-width: 8
+#| fig-height: 5
+
+ggplot2::ggplot(
+  r4c_crosstab,
+  ggplot2::aes(
+    x = Question,
+    y = Yes_Percentage,
+    fill = Residence
+  )
+) +
+  ggplot2::geom_col(
+    position = ggplot2::position_dodge(0.8),
+    width = 0.7
+  ) +
+  ggplot2::geom_text(
+    ggplot2::aes(
+      label = paste0(Yes_Percentage, "%")
+    ),
+    position = ggplot2::position_dodge(0.8),
+    vjust = -0.4,
+    size = 3.5
+  ) +
+  ggplot2::scale_fill_manual(
+    values = c("#4472C4", "#ED7D31")
+  ) +
+  ggplot2::scale_y_continuous(
+    limits = c(0, 110)
+  ) +
+  ggplot2::labs(
+    x = "Question",
+    y = "Yes Response (%)",
+    fill = "Residence"
+  ) +
+  ggplot2::theme_minimal() +
+  ggplot2::theme(
+    legend.position = "bottom"
+  )
+```
+
+## Findings and Insights
+
+Most operational effectiveness ratings showed no
+significant differences between residence groups.
+
+Q34 was the only significant result before multiple
+comparison adjustment (t = -2.280, p = 0.0249).
+Members living elsewhere reported a higher mean
+rating (M = 3.61) than those living in the
+headquarters area (M = 3.28).
+
+Neither Q11 (p = 0.5851) nor Q12 (p = 0.2506)
+showed a significant association with residence.
+
+Overall, member residence does not appear to be
+a major factor in operational effectiveness.
+However, the credit union could further investigate
+the loan application experience among headquarters
+area members. The Q34 result should be interpreted
+cautiously due to multiple comparisons.
+
+## Appendix
+
+### GitHub Repository
+
+[View GitHub Repository](https://github.com/WillySuu/IC11-2-Case31-Data-Analysis)
+
+### Published Presentation
+
+[View Published Presentation](https://willysuu.github.io/IC11-2-Case31-Data-Analysis/)
